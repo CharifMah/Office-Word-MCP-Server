@@ -212,3 +212,99 @@ async def merge_documents(target_filename: str, source_filenames: List[str], add
 async def get_document_xml_tool(filename: str) -> str:
     """Get the raw XML structure of a Word document."""
     return get_document_xml(filename)
+
+
+async def get_table_details(filename: str, table_index: int) -> str:
+    """Get detailed info about a table including special chars, alignment, indentation, and formatting of each cell.
+
+    Args:
+        filename: Path to the Word document
+        table_index: Index of the table (0-based)
+    """
+    from docx import Document
+    from docx.oxml.ns import qn
+    import json
+
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range (0-{len(doc.tables)-1})"
+
+        table = doc.tables[table_index]
+        result = {
+            "table_index": table_index,
+            "style": table.style.name if table.style else None,
+            "rows": len(table.rows),
+            "cols": len(table.columns),
+            "cells": []
+        }
+
+        for r in range(len(table.rows)):
+            for c in range(len(table.columns)):
+                cell = table.cell(r, c)
+                para = cell.paragraphs[0] if cell.paragraphs else None
+
+                # Get raw text with visible special chars
+                raw_text = cell.text
+                visible_text = raw_text.replace('\t', '\\t').replace('\n', '\\n').replace('\r', '\\r').replace(' ', '\\s').replace('\xa0', '\\xa0')
+
+                cell_info = {
+                    "row": r,
+                    "col": c,
+                    "raw_text": raw_text,
+                    "visible_chars": visible_text,
+                    "text_length": len(raw_text),
+                    "has_leading_space": raw_text != raw_text.lstrip() if raw_text else False,
+                    "has_trailing_space": raw_text != raw_text.rstrip() if raw_text else False,
+                    "is_empty": raw_text.strip() == "",
+                }
+
+                if para:
+                    pf = para.paragraph_format
+                    cell_info["alignment"] = str(para.alignment) if para.alignment is not None else None
+                    cell_info["left_indent"] = str(pf.left_indent) if pf.left_indent else None
+                    cell_info["first_line_indent"] = str(pf.first_line_indent) if pf.first_line_indent else None
+                    cell_info["space_before"] = str(pf.space_before) if pf.space_before else None
+                    cell_info["space_after"] = str(pf.space_after) if pf.space_after else None
+
+                    # Check XML indentation
+                    pPr = para._element.find(qn('w:pPr'))
+                    if pPr is not None:
+                        ind = pPr.find(qn('w:ind'))
+                        if ind is not None:
+                            cell_info["xml_indent"] = {
+                                "left": ind.get(qn('w:left')),
+                                "firstLine": ind.get(qn('w:firstLine')),
+                                "hanging": ind.get(qn('w:hanging')),
+                            }
+
+                    # Run details
+                    runs_info = []
+                    for run in para.runs:
+                        run_info = {
+                            "text": run.text,
+                            "visible": run.text.replace('\t', '\\t').replace(' ', '\\s').replace('\xa0', '\\xa0') if run.text else "",
+                            "bold": run.font.bold,
+                            "size": str(run.font.size) if run.font.size else None,
+                            "color": str(run.font.color.rgb) if run.font.color and run.font.color.rgb else None,
+                            "font_name": run.font.name,
+                        }
+                        runs_info.append(run_info)
+                    cell_info["runs"] = runs_info
+
+                # Cell shading
+                tcPr = cell._element.find(qn('w:tcPr'))
+                if tcPr is not None:
+                    shd = tcPr.find(qn('w:shd'))
+                    if shd is not None:
+                        cell_info["shading"] = shd.get(qn('w:fill'))
+
+                result["cells"].append(cell_info)
+
+        return json.dumps(result, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        return f"Failed to get table details: {str(e)}"

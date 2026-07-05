@@ -161,6 +161,16 @@ def register_tools():
     def get_document_xml(filename: str):
         """Get the raw XML structure of a Word document."""
         return document_tools.get_document_xml_tool(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Table Details",
+            readOnlyHint=True,
+        ),
+    )
+    def get_table_details(filename: str, table_index: int):
+        """Get detailed info about a table including special chars, alignment, indentation, and formatting of each cell."""
+        return document_tools.get_table_details(filename, table_index)
     
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -654,6 +664,56 @@ def register_tools():
     def format_table_all_cells(filename: str, table_index: int, font_size: int = None, bold: bool = None, header_bold: bool = None, header_color: str = None, header_text_color: str = None, align: str = None, style_name: str = None):
         """Format all cells of a table in one call."""
         return content_tools.format_table_all_cells(filename, table_index, font_size, bold, header_bold, header_color, header_text_color, align, style_name)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Delete Paragraphs Range", destructiveHint=True))
+    def delete_paragraphs_range(filename: str, start_index: int, end_index: int):
+        """Delete a range of paragraphs from start_index to end_index (inclusive)."""
+        return content_tools.delete_paragraphs_range(filename, start_index, end_index)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Set Paragraph Spacing", destructiveHint=True))
+    def set_paragraph_spacing(filename: str, paragraph_index: int, before: float = None, after: float = None, line_spacing: float = None):
+        """Set spacing for a specific paragraph."""
+        return content_tools.set_paragraph_spacing(filename, paragraph_index, before, after, line_spacing)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Set Page Margins", destructiveHint=True))
+    def set_section_page_margins(filename: str, top: float = 2.5, bottom: float = 2.5, left: float = 2.5, right: float = 2.5):
+        """Set page margins for the document (in cm)."""
+        return content_tools.set_section_page_margins(filename, top, bottom, left, right)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Set Table Borders", destructiveHint=True))
+    def set_table_borders(filename: str, table_index: int, border_style: str = 'single', border_size: int = 4, border_color: str = '000000'):
+        """Set borders for a table."""
+        return content_tools.set_table_borders(filename, table_index, border_style, border_size, border_color)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Set Cell Margins All", destructiveHint=True))
+    def set_cell_margins_all(filename: str, table_index: int, top: float = 0, bottom: float = 0, left: float = 0.19, right: float = 0.19):
+        """Set cell margins (padding) for all cells in a table (in cm)."""
+        return content_tools.set_cell_margins_all(filename, table_index, top, bottom, left, right)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Add Bullet List", destructiveHint=True))
+    def add_bullet_list(filename: str, items: list, style: str = 'List Bullet'):
+        """Add a bulleted list to the end of the document."""
+        return content_tools.add_bullet_list(filename, items, style)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Replace Table Data", destructiveHint=True))
+    def replace_table_data(filename: str, table_index: int, headers: list, data: list):
+        """Replace all data in a table with new headers and data."""
+        return content_tools.replace_table_data(filename, table_index, headers, data)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Set Header Footer", destructiveHint=True))
+    def set_header_footer(filename: str, header_text: str = None, footer_text: str = None):
+        """Set header and/or footer text for the document."""
+        return content_tools.set_header_footer(filename, header_text, footer_text)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Add Page Number to Footer", destructiveHint=True))
+    def add_page_number_to_footer(filename: str):
+        """Add page number field to the footer of the document."""
+        return content_tools.add_page_number_to_footer(filename)
+
+    @mcp.tool(annotations=ToolAnnotations(title="Remove Table Indentation", destructiveHint=True))
+    def remove_all_indentation_from_table(filename: str, table_index: int):
+        """Remove all paragraph indentation from all cells in a table."""
+        return content_tools.remove_all_indentation_from_table(filename, table_index)
 
     # Comment tools
     @mcp.tool(

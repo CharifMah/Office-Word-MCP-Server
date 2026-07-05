@@ -7,7 +7,7 @@ including headings, paragraphs, tables, images, and page breaks.
 import os
 from typing import List, Optional, Dict, Any
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor, Cm
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
@@ -827,7 +827,6 @@ async def format_table_all_cells(filename: str, table_index: int,
         style_name: Table style name to apply (e.g. 'Grid Table 1 Light Accent 2')
     """
     filename = ensure_docx_extension(filename)
-
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
 
@@ -838,11 +837,9 @@ async def format_table_all_cells(filename: str, table_index: int,
     try:
         doc = Document(filename)
         if table_index < 0 or table_index >= len(doc.tables):
-            return f"Table index {table_index} out of range (0-{len(doc.tables)-1})"
+            return f"Table index {table_index} out of range"
 
         table = doc.tables[table_index]
-
-        # Apply table style
         if style_name:
             try:
                 table.style = doc.styles[style_name]
@@ -850,11 +847,7 @@ async def format_table_all_cells(filename: str, table_index: int,
                 pass
 
         from docx.enum.text import WD_ALIGN_PARAGRAPH
-        align_map = {
-            'left': WD_ALIGN_PARAGRAPH.LEFT,
-            'center': WD_ALIGN_PARAGRAPH.CENTER,
-            'right': WD_ALIGN_PARAGRAPH.RIGHT,
-        }
+        align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT, 'center': WD_ALIGN_PARAGRAPH.CENTER, 'right': WD_ALIGN_PARAGRAPH.RIGHT}
         para_align = align_map.get(align.lower()) if align else None
 
         for r in range(len(table.rows)):
@@ -863,6 +856,10 @@ async def format_table_all_cells(filename: str, table_index: int,
                 for para in cell.paragraphs:
                     if para_align is not None:
                         para.alignment = para_align
+                    # Remove all indentation
+                    pf = para.paragraph_format
+                    pf.left_indent = Cm(0)
+                    pf.first_line_indent = Cm(0)
                     for run in para.runs:
                         if font_size is not None:
                             run.font.size = Pt(font_size)
@@ -873,13 +870,10 @@ async def format_table_all_cells(filename: str, table_index: int,
             if r == 0:
                 if header_bold is not None:
                     for c in range(len(table.columns)):
-                        cell = table.cell(0, c)
-                        for para in cell.paragraphs:
+                        for para in table.cell(0, c).paragraphs:
                             for run in para.runs:
                                 run.font.bold = header_bold
-
                 if header_color:
-                    from docx.oxml import OxmlElement
                     for c in range(len(table.columns)):
                         cell = table.cell(0, c)
                         tc_pr = cell._tc.get_or_add_tcPr()
@@ -888,16 +882,322 @@ async def format_table_all_cells(filename: str, table_index: int,
                         shd.set(qn('w:color'), 'auto')
                         shd.set(qn('w:fill'), header_color)
                         tc_pr.append(shd)
-
                 if header_text_color:
                     color_hex = header_text_color.lstrip('#')
                     for c in range(len(table.columns)):
-                        cell = table.cell(0, c)
-                        for para in cell.paragraphs:
+                        for para in table.cell(0, c).paragraphs:
                             for run in para.runs:
                                 run.font.color.rgb = RGBColor.from_string(color_hex)
 
         doc.save(filename)
-        return f"All cells in table {table_index} formatted successfully (size={font_size}, bold={bold}, header_bold={header_bold}, header_color={header_color}, align={align}, style={style_name})"
+        return f"All cells in table {table_index} formatted successfully"
     except Exception as e:
         return f"Failed to format table: {str(e)}"
+
+
+async def delete_paragraphs_range(filename: str, start_index: int, end_index: int) -> str:
+    """Delete a range of paragraphs from start_index to end_index (inclusive)."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if start_index < 0 or end_index >= len(doc.paragraphs) or start_index > end_index:
+            return f"Invalid range: {start_index}-{end_index}"
+        count = 0
+        for i in range(end_index, start_index - 1, -1):
+            para = doc.paragraphs[i]
+            para._element.getparent().remove(para._element)
+            count += 1
+        doc.save(filename)
+        return f"Deleted {count} paragraphs (indices {start_index}-{end_index})"
+    except Exception as e:
+        return f"Failed to delete paragraphs: {str(e)}"
+
+
+async def set_paragraph_spacing(filename: str, paragraph_index: int,
+                                 before: Optional[float] = None,
+                                 after: Optional[float] = None,
+                                 line_spacing: Optional[float] = None) -> str:
+    """Set spacing for a specific paragraph."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+            return f"Paragraph index {paragraph_index} out of range"
+        para = doc.paragraphs[paragraph_index]
+        pf = para.paragraph_format
+        if before is not None:
+            pf.space_before = Pt(before)
+        if after is not None:
+            pf.space_after = Pt(after)
+        if line_spacing is not None:
+            pf.line_spacing = line_spacing
+        doc.save(filename)
+        return f"Spacing set for paragraph {paragraph_index}"
+    except Exception as e:
+        return f"Failed to set spacing: {str(e)}"
+
+
+async def set_section_page_margins(filename: str, top: float = 2.5, bottom: float = 2.5,
+                                    left: float = 2.5, right: float = 2.5) -> str:
+    """Set page margins for the document (in cm)."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        for section in doc.sections:
+            section.top_margin = Cm(top)
+            section.bottom_margin = Cm(bottom)
+            section.left_margin = Cm(left)
+            section.right_margin = Cm(right)
+        doc.save(filename)
+        return f"Page margins set: top={top}cm, bottom={bottom}cm, left={left}cm, right={right}cm"
+    except Exception as e:
+        return f"Failed to set margins: {str(e)}"
+
+
+async def set_table_borders(filename: str, table_index: int,
+                             border_style: str = 'single',
+                             border_size: int = 4,
+                             border_color: str = '000000') -> str:
+    """Set borders for a table."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range"
+        table = doc.tables[table_index]
+        tblPr = table._element.find(qn('w:tblPr'))
+        if tblPr is None:
+            tblPr = OxmlElement('w:tblPr')
+            table._element.insert(0, tblPr)
+        existing = tblPr.find(qn('w:tblBorders'))
+        if existing is not None:
+            tblPr.remove(existing)
+        borders = OxmlElement('w:tblBorders')
+        for edge in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{edge}')
+            border.set(qn('w:val'), border_style)
+            border.set(qn('w:sz'), str(border_size))
+            border.set(qn('w:space'), '0')
+            border.set(qn('w:color'), border_color)
+            borders.append(border)
+        tblPr.append(borders)
+        doc.save(filename)
+        return f"Table {table_index} borders set"
+    except Exception as e:
+        return f"Failed to set borders: {str(e)}"
+
+
+async def set_cell_margins_all(filename: str, table_index: int,
+                                top: float = 0, bottom: float = 0,
+                                left: float = 0.19, right: float = 0.19) -> str:
+    """Set cell margins (padding) for all cells in a table (in cm)."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range"
+        table = doc.tables[table_index]
+        top_tw = int(top * 567)
+        bottom_tw = int(bottom * 567)
+        left_tw = int(left * 567)
+        right_tw = int(right * 567)
+        for r in range(len(table.rows)):
+            for c in range(len(table.columns)):
+                cell = table.cell(r, c)
+                tcPr = cell._element.find(qn('w:tcPr'))
+                if tcPr is None:
+                    tcPr = OxmlElement('w:tcPr')
+                    cell._element.insert(0, tcPr)
+                existing = tcPr.find(qn('w:tcMar'))
+                if existing is not None:
+                    tcPr.remove(existing)
+                tcMar = OxmlElement('w:tcMar')
+                for edge, val in [('top', top_tw), ('bottom', bottom_tw), ('left', left_tw), ('right', right_tw)]:
+                    margin = OxmlElement(f'w:{edge}')
+                    margin.set(qn('w:w'), str(val))
+                    margin.set(qn('w:type'), 'dxa')
+                    tcMar.append(margin)
+                tcPr.append(tcMar)
+        doc.save(filename)
+        return f"Cell margins set for table {table_index}"
+    except Exception as e:
+        return f"Failed to set cell margins: {str(e)}"
+
+
+async def add_bullet_list(filename: str, items: List[str], style: str = 'List Bullet') -> str:
+    """Add a bulleted list to the end of the document."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        for item in items:
+            doc.add_paragraph(item, style=style)
+        doc.save(filename)
+        return f"Added {len(items)} bullet items"
+    except Exception as e:
+        return f"Failed to add bullet list: {str(e)}"
+
+
+async def replace_table_data(filename: str, table_index: int,
+                              headers: List[str],
+                              data: List[List[str]]) -> str:
+    """Replace all data in a table with new headers and data."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range"
+        table = doc.tables[table_index]
+        total_rows = len(data) + 1
+        while len(table.rows) < total_rows:
+            table.add_row()
+        while len(table.rows) > total_rows:
+            row = table.rows[-1]
+            row._element.getparent().remove(row._element)
+        for c, h in enumerate(headers):
+            if c < len(table.columns):
+                cell = table.cell(0, c)
+                cell.text = h
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        run.font.bold = True
+        for r, row_data in enumerate(data):
+            for c, val in enumerate(row_data):
+                if c < len(table.columns):
+                    cell = table.cell(r + 1, c)
+                    cell.text = str(val) if val else ''
+        doc.save(filename)
+        return f"Table {table_index} data replaced"
+    except Exception as e:
+        return f"Failed to replace table data: {str(e)}"
+
+
+async def set_header_footer(filename: str, header_text: str = None,
+                             footer_text: str = None) -> str:
+    """Set header and/or footer text for the document."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        for section in doc.sections:
+            if header_text is not None:
+                header = section.header
+                if header.paragraphs:
+                    header.paragraphs[0].text = header_text
+                else:
+                    header.add_paragraph(header_text)
+            if footer_text is not None:
+                footer = section.footer
+                if footer.paragraphs:
+                    footer.paragraphs[0].text = footer_text
+                else:
+                    footer.add_paragraph(footer_text)
+        doc.save(filename)
+        return f"Header/footer set"
+    except Exception as e:
+        return f"Failed to set header/footer: {str(e)}"
+
+
+async def add_page_number_to_footer(filename: str) -> str:
+    """Add page number field to the footer of the document."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        for section in doc.sections:
+            footer = section.footer
+            if footer.paragraphs:
+                para = footer.paragraphs[0]
+            else:
+                para = footer.add_paragraph()
+            run = para.add_run()
+            fld_char1 = OxmlElement('w:fldChar')
+            fld_char1.set(qn('w:fldCharType'), 'begin')
+            instr_text = OxmlElement('w:instrText')
+            instr_text.set(qn('xml:space'), 'preserve')
+            instr_text.text = 'PAGE'
+            fld_char2 = OxmlElement('w:fldChar')
+            fld_char2.set(qn('w:fldCharType'), 'end')
+            run._element.append(fld_char1)
+            run._element.append(instr_text)
+            run._element.append(fld_char2)
+        doc.save(filename)
+        return f"Page number added to footer"
+    except Exception as e:
+        return f"Failed to add page number: {str(e)}"
+
+
+async def remove_all_indentation_from_table(filename: str, table_index: int) -> str:
+    """Remove all paragraph indentation from all cells in a table."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range"
+        table = doc.tables[table_index]
+        count = 0
+        for r in range(len(table.rows)):
+            for c in range(len(table.columns)):
+                cell = table.cell(r, c)
+                for para in cell.paragraphs:
+                    pf = para.paragraph_format
+                    pf.left_indent = Cm(0)
+                    pf.first_line_indent = Cm(0)
+                    pf.right_indent = Cm(0)
+                    pPr = para._element.find(qn('w:pPr'))
+                    if pPr is not None:
+                        ind = pPr.find(qn('w:ind'))
+                        if ind is not None:
+                            pPr.remove(ind)
+                            count += 1
+        doc.save(filename)
+        return f"Removed indentation from {count} paragraphs in table {table_index}"
+    except Exception as e:
+        return f"Failed to remove indentation: {str(e)}"
