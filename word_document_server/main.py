@@ -331,6 +331,17 @@ def register_tools():
         """Format a table with borders, shading, and structure."""
         return format_tools.format_table(filename, table_index, has_header_row, border_style, shading)
     
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Reset Table Colors",
+            destructiveHint=True,
+        ),
+    )
+    def reset_table_colors(filename: str, table_index: int,
+                          fill_color: str = "FFFFFF", text_color: str = "000000"):
+        """Reset all table cell shadings to a neutral color and set text color."""
+        return format_tools.reset_table_colors(filename, table_index, fill_color, text_color)
+    
     # New table cell shading tools
     @mcp.tool(
         annotations=ToolAnnotations(

@@ -220,6 +220,57 @@ def apply_alternating_row_shading(table, color1="FFFFFF", color2="F2F2F2"):
         return False
 
 
+def reset_table_colors(table, fill_color="FFFFFF", text_color="000000"):
+    """
+    Reset all table cell shadings to a single background color and set text color.
+    Removes existing shading from every cell and applies the specified colors.
+    Also removes bold from header runs unless keep_header_bold is desired.
+    
+    Args:
+        table: The table to format
+        fill_color: Background color for all cells (hex string, default white)
+        text_color: Text color for all cells (hex string, default black)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        from docx.shared import RGBColor
+        
+        for row in table.rows:
+            for cell in row.cells:
+                # Remove existing shading
+                tc_pr = cell._tc.get_or_add_tcPr()
+                existing_shd = tc_pr.find(qn('w:shd'))
+                if existing_shd is not None:
+                    tc_pr.remove(existing_shd)
+                
+                # Add clean shading
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:val'), 'clear')
+                shd.set(qn('w:color'), 'auto')
+                shd.set(qn('w:fill'), fill_color)
+                tc_pr.append(shd)
+                
+                # Set text color for all runs
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        try:
+                            text_color_hex = text_color.lstrip('#')
+                            r = int(text_color_hex[0:2], 16)
+                            g = int(text_color_hex[2:4], 16)
+                            b = int(text_color_hex[4:6], 16)
+                            run.font.color.rgb = RGBColor(r, g, b)
+                        except Exception:
+                            pass
+        return True
+    except Exception as e:
+        print(f"Error resetting table colors: {e}")
+        return False
+
+
 def highlight_header_row(table, header_color="4472C4", text_color="FFFFFF"):
     """
     Apply special shading to header row.

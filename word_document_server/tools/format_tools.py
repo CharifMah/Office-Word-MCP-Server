@@ -15,7 +15,7 @@ from word_document_server.utils.file_utils import check_file_writeable, ensure_d
 from word_document_server.core.styles import create_style
 from word_document_server.core.tables import (
     apply_table_style, set_cell_shading_by_position, apply_alternating_row_shading,
-    highlight_header_row, merge_cells, merge_cells_horizontal, merge_cells_vertical,
+    highlight_header_row, reset_table_colors as reset_table_colors_func, merge_cells, merge_cells_horizontal, merge_cells_vertical,
     set_cell_alignment_by_position, set_table_alignment, set_column_width_by_position,
     set_column_widths, set_table_width as set_table_width_func, auto_fit_table,
     format_cell_text_by_position, set_cell_padding_by_position
@@ -187,6 +187,51 @@ async def create_custom_style(filename: str, style_name: str,
         return f"Style '{style_name}' created successfully."
     except Exception as e:
         return f"Failed to create style: {str(e)}"
+
+
+async def reset_table_colors(filename: str, table_index: int,
+                            fill_color: str = "FFFFFF",
+                            text_color: str = "000000") -> str:
+    """Reset all cell shadings in a table to a single color and set text color.
+    
+    This is useful for removing colored headers (e.g. blue) and returning
+    to a neutral black-on-white format.
+    
+    Args:
+        filename: Path to the Word document
+        table_index: Index of the table (0-based)
+        fill_color: Background color for all cells (hex string, default white)
+        text_color: Text color for all cells (hex string, default black)
+    """
+    filename = ensure_docx_extension(filename)
+    
+    try:
+        table_index = int(table_index)
+    except (ValueError, TypeError):
+        return "Invalid parameter: table_index must be an integer"
+    
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+        
+        table = doc.tables[table_index]
+        success = reset_table_colors_func(table, fill_color, text_color)
+        
+        if success:
+            doc.save(filename)
+            return f"Table colors reset successfully for table {table_index}."
+        else:
+            return f"Failed to reset colors for table {table_index}."
+    except Exception as e:
+        return f"Failed to reset table colors: {str(e)}"
 
 
 async def format_table(filename: str, table_index: int, 
