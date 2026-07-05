@@ -839,8 +839,10 @@ def run_server():
     transport_type = config['transport']
     print(f"Starting Word Document MCP Server with {transport_type} transport...")
     
-    # if config['debug']:
-    #     print(f"Configuration: {config}")
+    # Safely access optional debug flag
+    debug_mode = config.get('debug', False)
+    if debug_mode:
+        print(f"Configuration: {config}")
     
     try:
         if transport_type == 'stdio':
@@ -872,7 +874,7 @@ def run_server():
         print("\nShutting down server...")
     except Exception as e:
         print(f"Error starting server: {e}")
-        if config['debug']:
+        if debug_mode:
             import traceback
             traceback.print_exc()
         sys.exit(1)
