@@ -645,6 +645,16 @@ def register_tools():
         """Get the text of a specific paragraph by index."""
         return content_tools.get_paragraph_text(filename, paragraph_index)
 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Format Table All Cells",
+            destructiveHint=True,
+        ),
+    )
+    def format_table_all_cells(filename: str, table_index: int, font_size: int = None, bold: bool = None, header_bold: bool = None, header_color: str = None, header_text_color: str = None, align: str = None, style_name: str = None):
+        """Format all cells of a table in one call."""
+        return content_tools.format_table_all_cells(filename, table_index, font_size, bold, header_bold, header_color, header_text_color, align, style_name)
+
     # Comment tools
     @mcp.tool(
         annotations=ToolAnnotations(

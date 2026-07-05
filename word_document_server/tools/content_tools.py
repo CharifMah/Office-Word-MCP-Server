@@ -803,3 +803,101 @@ async def get_paragraph_text(filename: str, paragraph_index: int) -> str:
         return f"Paragraph {paragraph_index} [{para.style.name}]: {para.text}"
     except Exception as e:
         return f"Failed to get paragraph: {str(e)}"
+
+
+async def format_table_all_cells(filename: str, table_index: int,
+                                  font_size: Optional[int] = None,
+                                  bold: Optional[bool] = None,
+                                  header_bold: Optional[bool] = None,
+                                  header_color: Optional[str] = None,
+                                  header_text_color: Optional[str] = None,
+                                  align: Optional[str] = None,
+                                  style_name: Optional[str] = None) -> str:
+    """Format all cells of a table in one call.
+
+    Args:
+        filename: Path to the Word document
+        table_index: Index of the table (0-based)
+        font_size: Font size in points for all cells
+        bold: Bold for all cells (True/False)
+        header_bold: Bold for header row only (overrides bold for row 0)
+        header_color: Hex color for header row background (e.g. '4472C4')
+        header_text_color: Hex color for header row text (e.g. 'FFFFFF')
+        align: Alignment for all cells ('left', 'center', 'right')
+        style_name: Table style name to apply (e.g. 'Grid Table 1 Light Accent 2')
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range (0-{len(doc.tables)-1})"
+
+        table = doc.tables[table_index]
+
+        # Apply table style
+        if style_name:
+            try:
+                table.style = doc.styles[style_name]
+            except KeyError:
+                pass
+
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        align_map = {
+            'left': WD_ALIGN_PARAGRAPH.LEFT,
+            'center': WD_ALIGN_PARAGRAPH.CENTER,
+            'right': WD_ALIGN_PARAGRAPH.RIGHT,
+        }
+        para_align = align_map.get(align.lower()) if align else None
+
+        for r in range(len(table.rows)):
+            for c in range(len(table.columns)):
+                cell = table.cell(r, c)
+                for para in cell.paragraphs:
+                    if para_align is not None:
+                        para.alignment = para_align
+                    for run in para.runs:
+                        if font_size is not None:
+                            run.font.size = Pt(font_size)
+                        if bold is not None:
+                            run.font.bold = bold
+
+            # Header row special formatting
+            if r == 0:
+                if header_bold is not None:
+                    for c in range(len(table.columns)):
+                        cell = table.cell(0, c)
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.bold = header_bold
+
+                if header_color:
+                    from docx.oxml import OxmlElement
+                    for c in range(len(table.columns)):
+                        cell = table.cell(0, c)
+                        tc_pr = cell._tc.get_or_add_tcPr()
+                        shd = OxmlElement('w:shd')
+                        shd.set(qn('w:val'), 'clear')
+                        shd.set(qn('w:color'), 'auto')
+                        shd.set(qn('w:fill'), header_color)
+                        tc_pr.append(shd)
+
+                if header_text_color:
+                    color_hex = header_text_color.lstrip('#')
+                    for c in range(len(table.columns)):
+                        cell = table.cell(0, c)
+                        for para in cell.paragraphs:
+                            for run in para.runs:
+                                run.font.color.rgb = RGBColor.from_string(color_hex)
+
+        doc.save(filename)
+        return f"All cells in table {table_index} formatted successfully (size={font_size}, bold={bold}, header_bold={header_bold}, header_color={header_color}, align={align}, style={style_name})"
+    except Exception as e:
+        return f"Failed to format table: {str(e)}"
