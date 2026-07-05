@@ -8,6 +8,8 @@ import os
 from typing import List, Optional, Dict, Any
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.utils.document_utils import find_and_replace_text, insert_header_near_text, insert_numbered_list_near_text, insert_line_or_paragraph_near_text, replace_paragraph_block_below_header, replace_block_between_manual_anchors
@@ -479,3 +481,325 @@ async def replace_paragraph_block_below_header_tool(filename: str, header_text: 
 async def replace_block_between_manual_anchors_tool(filename: str, start_anchor_text: str, new_paragraphs: list, end_anchor_text: str = None, match_fn=None, new_paragraph_style: str = None) -> str:
     """Replace all content between start_anchor_text and end_anchor_text (or next logical header if not provided)."""
     return replace_block_between_manual_anchors(filename, start_anchor_text, new_paragraphs, end_anchor_text, match_fn, new_paragraph_style)
+
+
+async def insert_paragraph_at_index(filename: str, text: str, paragraph_index: int = 0, style: Optional[str] = None,
+                                     font_name: Optional[str] = None, font_size: Optional[int] = None,
+                                     bold: Optional[bool] = None, italic: Optional[bool] = None,
+                                     color: Optional[str] = None) -> str:
+    """Insert a paragraph at a specific index in the document.
+
+    Args:
+        filename: Path to the Word document
+        text: Paragraph text
+        paragraph_index: Index at which to insert the paragraph (0-based)
+        style: Optional paragraph style name
+        font_name: Font family
+        font_size: Font size in points
+        bold: True/False for bold text
+        italic: True/False for italic text
+        color: RGB color as hex string
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}. Consider creating a copy first."
+
+    try:
+        doc = Document(filename)
+        body = doc.element.body
+
+        # Get the paragraph at the specified index to insert before it
+        paragraphs = doc.paragraphs
+        if paragraph_index >= len(paragraphs):
+            # Append at the end
+            para = doc.add_paragraph(text)
+        else:
+            # Insert before the paragraph at the specified index
+            target_para = paragraphs[paragraph_index]
+            new_p = OxmlElement('w:p')
+            target_para._element.addprevious(new_p)
+            para = doc.paragraphs[paragraph_index]
+
+        # Set text
+        para.text = text
+
+        # Apply style
+        if style:
+            try:
+                para.style = doc.styles[style]
+            except KeyError:
+                pass
+
+        # Apply formatting
+        if any([font_name, font_size, bold is not None, italic is not None, color]):
+            for run in para.runs:
+                if font_name:
+                    run.font.name = font_name
+                if font_size:
+                    run.font.size = Pt(font_size)
+                if bold is not None:
+                    run.font.bold = bold
+                if italic is not None:
+                    run.font.italic = italic
+                if color:
+                    color_hex = color.lstrip('#')
+                    run.font.color.rgb = RGBColor.from_string(color_hex)
+
+        doc.save(filename)
+        return f"Paragraph inserted at index {paragraph_index} in {filename}"
+    except Exception as e:
+        return f"Failed to insert paragraph: {str(e)}"
+
+
+async def move_section(filename: str, start_heading_text: str, target_heading_text: str) -> str:
+    """Move a section (from start_heading to the next heading of same level) to before target_heading.
+
+    Args:
+        filename: Path to the Word document
+        start_heading_text: Text of the heading that starts the section to move
+        target_heading_text: Text of the heading before which to insert the section
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}. Consider creating a copy first."
+
+    try:
+        doc = Document(filename)
+        paragraphs = doc.paragraphs
+
+        # Find the start heading
+        start_idx = None
+        start_level = None
+        for i, p in enumerate(paragraphs):
+            if p.style.name.startswith('Heading') and start_heading_text.lower() in p.text.lower():
+                start_idx = i
+                start_level = p.style.name
+                break
+
+        if start_idx is None:
+            return f"Heading '{start_heading_text}' not found"
+
+        # Find the end of the section (next heading of same or higher level)
+        end_idx = len(paragraphs)
+        for i in range(start_idx + 1, len(paragraphs)):
+            p = paragraphs[i]
+            if p.style.name == start_level:
+                end_idx = i
+                break
+            # Also check if it's a higher level heading (lower number)
+            if p.style.name.startswith('Heading'):
+                try:
+                    current_level = int(p.style.name.split()[-1])
+                    target_level = int(start_level.split()[-1])
+                    if current_level <= target_level:
+                        end_idx = i
+                        break
+                except (ValueError, IndexError):
+                    pass
+
+        # Find the target heading
+        target_idx = None
+        for i, p in enumerate(paragraphs):
+            if p.style.name.startswith('Heading') and target_heading_text.lower() in p.text.lower():
+                target_idx = i
+                break
+
+        if target_idx is None:
+            return f"Target heading '{target_heading_text}' not found"
+
+        # Collect elements to move (paragraphs and tables between start_idx and end_idx)
+        body = doc.element.body
+        elements_to_move = []
+
+        # Get all body elements and find the ones between start and end
+        para_idx = 0
+        for elem in list(body):
+            if elem.tag == qn('w:p'):
+                if start_idx <= para_idx < end_idx:
+                    elements_to_move.append(elem)
+                para_idx += 1
+            elif elem.tag == qn('w:tbl'):
+                # Tables don't have a paragraph index but are between paragraphs
+                # Check if the previous paragraph was in range
+                if start_idx <= para_idx < end_idx:
+                    elements_to_move.append(elem)
+
+        if not elements_to_move:
+            return f"No content found to move from section '{start_heading_text}'"
+
+        # Find the target element to insert before
+        target_elem = None
+        para_idx = 0
+        for elem in list(body):
+            if elem.tag == qn('w:p'):
+                if para_idx == target_idx:
+                    target_elem = elem
+                    break
+                para_idx += 1
+
+        if target_elem is None:
+            return f"Target element not found"
+
+        # Move elements
+        for elem in elements_to_move:
+            body.remove(elem)
+            target_elem.addprevious(elem)
+
+        doc.save(filename)
+        return f"Section '{start_heading_text}' moved before '{target_heading_text}' in {filename}"
+    except Exception as e:
+        return f"Failed to move section: {str(e)}"
+
+
+async def delete_table(filename: str, table_index: int) -> str:
+    """Delete a table from the document by its index.
+
+    Args:
+        filename: Path to the Word document
+        table_index: Index of the table to delete (0-based)
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}. Consider creating a copy first."
+
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Table index {table_index} out of range (0-{len(doc.tables)-1})"
+
+        table = doc.tables[table_index]
+        table._element.getparent().remove(table._element)
+
+        doc.save(filename)
+        return f"Table {table_index} deleted from {filename}"
+    except Exception as e:
+        return f"Failed to delete table: {str(e)}"
+
+
+async def insert_table_at_position(filename: str, headers: List[str], data: List[List[str]],
+                                     target_text: str = None, target_paragraph_index: int = None,
+                                     position: str = 'after') -> str:
+    """Insert a formatted table at a specific position in the document.
+
+    Args:
+        filename: Path to the Word document
+        headers: List of column header strings
+        data: 2D list of table data rows
+        target_text: Text to find the insertion point (insert before/after this paragraph)
+        target_paragraph_index: Paragraph index for insertion point
+        position: 'before' or 'after' the target
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}. Consider creating a copy first."
+
+    try:
+        doc = Document(filename)
+        paragraphs = doc.paragraphs
+
+        # Find target paragraph
+        target_idx = None
+        if target_paragraph_index is not None:
+            if 0 <= target_paragraph_index < len(paragraphs):
+                target_idx = target_paragraph_index
+        elif target_text:
+            for i, p in enumerate(paragraphs):
+                if target_text.lower() in p.text.lower():
+                    target_idx = i
+                    break
+
+        if target_idx is None:
+            # Append at end
+            table = doc.add_table(rows=1 + len(data), cols=len(headers))
+        else:
+            # Create table element and insert at position
+            target_para = paragraphs[target_idx]
+            # Create a temporary table at the end, then move it
+            table = doc.add_table(rows=1 + len(data), cols=len(headers))
+            table_elem = table._element
+            # Remove from end
+            body = doc.element.body
+            body.remove(table_elem)
+            # Insert at position
+            if position == 'before':
+                target_para._element.addprevious(table_elem)
+            else:
+                # Insert after (find next sibling)
+                next_sibling = target_para._element.getnext()
+                if next_sibling is not None:
+                    next_sibling.addprevious(table_elem)
+                else:
+                    body.append(table_elem)
+
+        # Try to set table style
+        try:
+            table.style = 'Table Grid'
+        except KeyError:
+            pass
+
+        # Fill headers
+        for j, h in enumerate(headers):
+            cell = table.cell(0, j)
+            cell.text = str(h)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.bold = True
+                    run.font.size = Pt(9)
+
+        # Fill data
+        for i, row in enumerate(data):
+            for j, val in enumerate(row):
+                if j < len(headers):
+                    cell = table.cell(i + 1, j)
+                    cell.text = str(val)
+                    for p in cell.paragraphs:
+                        for run in p.runs:
+                            run.font.size = Pt(9)
+
+        doc.save(filename)
+        return f"Table with {len(data)} rows inserted at position {target_idx} ({position}) in {filename}"
+    except Exception as e:
+        return f"Failed to insert table: {str(e)}"
+
+
+async def get_paragraph_text(filename: str, paragraph_index: int) -> str:
+    """Get the text of a specific paragraph by index.
+
+    Args:
+        filename: Path to the Word document
+        paragraph_index: Index of the paragraph (0-based)
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    try:
+        doc = Document(filename)
+        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+            return f"Paragraph index {paragraph_index} out of range (0-{len(doc.paragraphs)-1})"
+
+        para = doc.paragraphs[paragraph_index]
+        return f"Paragraph {paragraph_index} [{para.style.name}]: {para.text}"
+    except Exception as e:
+        return f"Failed to get paragraph: {str(e)}"

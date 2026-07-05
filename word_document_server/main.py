@@ -595,6 +595,56 @@ def register_tools():
         """Replace all content between start_anchor_text and end_anchor_text (or next logical header if not provided)."""
         return replace_block_between_manual_anchors_tool(filename, start_anchor_text, new_paragraphs, end_anchor_text, match_fn, new_paragraph_style)
 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Insert Paragraph at Index",
+            destructiveHint=True,
+        ),
+    )
+    def insert_paragraph_at_index(filename: str, text: str, paragraph_index: int = 0, style: str = None, font_name: str = None, font_size: int = None, bold: bool = None, italic: bool = None, color: str = None):
+        """Insert a paragraph at a specific index in the document."""
+        return content_tools.insert_paragraph_at_index(filename, text, paragraph_index, style, font_name, font_size, bold, italic, color)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Move Section",
+            destructiveHint=True,
+        ),
+    )
+    def move_section(filename: str, start_heading_text: str, target_heading_text: str):
+        """Move a section (from start_heading to next heading of same level) to before target_heading."""
+        return content_tools.move_section(filename, start_heading_text, target_heading_text)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Delete Table",
+            destructiveHint=True,
+        ),
+    )
+    def delete_table(filename: str, table_index: int):
+        """Delete a table from the document by its index (0-based)."""
+        return content_tools.delete_table(filename, table_index)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Insert Table at Position",
+            destructiveHint=True,
+        ),
+    )
+    def insert_table_at_position(filename: str, headers: list[str], data: list[list[str]], target_text: str = None, target_paragraph_index: int = None, position: str = 'after'):
+        """Insert a formatted table at a specific position in the document."""
+        return content_tools.insert_table_at_position(filename, headers, data, target_text, target_paragraph_index, position)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Paragraph Text",
+            readOnlyHint=True,
+        ),
+    )
+    def get_paragraph_text(filename: str, paragraph_index: int):
+        """Get the text of a specific paragraph by index."""
+        return content_tools.get_paragraph_text(filename, paragraph_index)
+
     # Comment tools
     @mcp.tool(
         annotations=ToolAnnotations(
