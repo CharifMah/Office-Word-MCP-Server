@@ -17,13 +17,13 @@ from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from word_document_server.tools import (
     document_tools,
-    content_tools,
     format_tools,
     protection_tools,
     footnote_tools,
     extended_document_tools,
     comment_tools
 )
+import word_document_server.tools.content as content_tools
 from word_document_server.tools.content import (
     replace_paragraph_block_below_header_tool,
     replace_block_between_manual_anchors_tool
@@ -233,7 +233,8 @@ def register_tools():
     )
     def add_heading(filename: str, text: str, level: int = 1,
                     font_name: str = None, font_size: int = None,
-                    bold: bool = None, italic: bool = None, border_bottom: bool = False):
+                    bold: bool = None, italic: bool = None, border_bottom: bool = False,
+                    page_break_before: bool = False, keep_with_next: bool = False):
         """Add a heading to a Word document with optional formatting.
 
         Args:
@@ -245,8 +246,10 @@ def register_tools():
             bold: Make heading bold
             italic: Make heading italic
             border_bottom: Add bottom border (for section headers)
+            page_break_before: Force a page break before the heading
+            keep_with_next: Keep heading with the following paragraph
         """
-        return content_tools.add_heading(filename, text, level, font_name, font_size, bold, italic, border_bottom)
+        return content_tools.add_heading(filename, text, level, font_name, font_size, bold, italic, border_bottom, page_break_before, keep_with_next)
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -831,13 +834,27 @@ def run_server():
     """Run the Word Document MCP Server with configurable transport."""
     # Get transport configuration
     config = get_transport_config()
-    
+
+    # Allow CLI override of transport
+    import argparse
+    parser = argparse.ArgumentParser(description="Word Document MCP Server")
+    parser.add_argument("--transport", type=str, choices=['stdio', 'sse', 'streamable-http'], default=None)
+    parser.add_argument("--host", type=str, default=None)
+    parser.add_argument("--port", type=int, default=None)
+    args = parser.parse_args()
+    if args.transport:
+        config['transport'] = args.transport
+    if args.host:
+        config['host'] = args.host
+    if args.port:
+        config['port'] = args.port
+
     # Setup logging
     # setup_logging(config['debug'])
-    
+
     # Register all tools
     register_tools()
-    
+
     # Print startup information
     transport_type = config['transport']
     print(f"Starting Word Document MCP Server with {transport_type} transport...")

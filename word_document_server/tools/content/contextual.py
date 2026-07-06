@@ -13,9 +13,10 @@ from word_document_server.utils.document_utils import insert_header_near_text, i
 
 async def insert_header_near_text_tool(filename: str, target_text: str = None, header_title: str = "",
                                         position: str = 'after', header_style: str = 'Heading 1',
-                                        target_paragraph_index: int = None) -> str:
+                                        target_paragraph_index: int = None,
+                                        page_break_before: bool = False, keep_with_next: bool = False) -> str:
     """Insert a header near specific text or paragraph index."""
-    return insert_header_near_text(filename, target_text, header_title, position, header_style, target_paragraph_index)
+    return insert_header_near_text(filename, target_text, header_title, position, header_style, target_paragraph_index, page_break_before, keep_with_next)
 
 
 async def insert_numbered_list_near_text_tool(filename: str, target_text: str = None, list_items: list = None,

@@ -33,8 +33,21 @@ async def delete_table(filename: str, table_index: int) -> str:
 
 async def insert_table_at_position(filename: str, headers: List[str], data: List[List[str]],
                                     target_text: str = None, target_paragraph_index: int = None,
-                                    position: str = 'after') -> str:
-    """Insert a formatted table at a specific position in the document."""
+                                    position: str = 'after',
+                                    header_color: str = 'E97132',
+                                    header_text_color: str = 'FFFFFF',
+                                    font_size: int = 9,
+                                    horizontal_align: str = 'center',
+                                    vertical_align: str = 'center',
+                                    border_style: str = 'single',
+                                    border_size: int = 4,
+                                    border_color: str = '000000') -> str:
+    """Insert a clean formatted table at a specific position in the document.
+
+    The table is inserted directly at the target paragraph (before/after) instead of
+    being created at the end and moved. All cells are centered horizontally and vertically.
+    Header uses the requested colors and text formatting.
+    """
     filename = ensure_docx_extension(filename)
     if not os.path.exists(filename):
         return f"Document {filename} does not exist"
@@ -45,35 +58,8 @@ async def insert_table_at_position(filename: str, headers: List[str], data: List
         doc = Document(filename)
         total_rows = len(data) + 1
         total_cols = len(headers)
-        table = doc.add_table(rows=total_rows, cols=total_cols)
-        try:
-            table.style = doc.styles['Grid Table 1 Light Accent 2']
-        except KeyError:
-            pass
 
-        # Fill headers
-        for c, h in enumerate(headers):
-            if c < total_cols:
-                cell = table.cell(0, c)
-                cell.text = h
-                for para in cell.paragraphs:
-                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    for run in para.runs:
-                        run.font.bold = True
-                        run.font.size = Pt(9)
-
-        # Fill data
-        for r, row_data in enumerate(data):
-            for c, val in enumerate(row_data):
-                if c < total_cols:
-                    cell = table.cell(r + 1, c)
-                    cell.text = str(val) if val else ''
-                    for para in cell.paragraphs:
-                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        for run in para.runs:
-                            run.font.size = Pt(9)
-
-        # Find target and move table
+        # Find anchor paragraph
         target_para = None
         if target_paragraph_index is not None:
             if 0 <= target_paragraph_index < len(doc.paragraphs):
@@ -84,12 +70,99 @@ async def insert_table_at_position(filename: str, headers: List[str], data: List
                     target_para = para
                     break
 
-        if target_para:
-            table_element = table._element
-            if position == 'before':
-                target_para._element.addprevious(table_element)
-            else:
-                target_para._element.addnext(table_element)
+        if target_para is None:
+            return "Target paragraph not found"
+
+        # Create table element directly at anchor to avoid trailing blank paragraphs
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        p = target_para._element
+        new_tbl = OxmlElement('w:tbl')
+        if position == 'before':
+            p.addprevious(new_tbl)
+        else:
+            p.addnext(new_tbl)
+        table = doc.tables[-1]  # newest table element maps to last Table object
+
+        # Ensure table has the requested number of rows/columns
+        while len(table.rows) < total_rows:
+            table.add_row()
+        while len(table.columns) < total_cols:
+            table.add_column()
+
+        # Helper to set cell text without extra leading space
+        def _set_cell_text(cell, text):
+            cell.text = ''
+            p = cell.paragraphs[0]
+            p.text = str(text) if text is not None else ''
+            return p
+
+        align_map = {
+            'left': WD_ALIGN_PARAGRAPH.LEFT,
+            'center': WD_ALIGN_PARAGRAPH.CENTER,
+            'right': WD_ALIGN_PARAGRAPH.RIGHT,
+            'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+        }
+        para_align = align_map.get(horizontal_align.lower(), WD_ALIGN_PARAGRAPH.CENTER)
+
+        # Fill headers
+        for c, h in enumerate(headers):
+            if c < total_cols:
+                cell = table.cell(0, c)
+                para = _set_cell_text(cell, h)
+                para.alignment = para_align
+                para.paragraph_format.space_before = Pt(0)
+                para.paragraph_format.space_after = Pt(0)
+                for run in para.runs:
+                    run.font.bold = True
+                    run.font.size = Pt(font_size)
+                    if header_text_color:
+                        run.font.color.rgb = RGBColor.from_string(header_text_color.lstrip('#'))
+                # header background
+                tc_pr = cell._tc.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:val'), 'clear')
+                shd.set(qn('w:color'), 'auto')
+                shd.set(qn('w:fill'), header_color.lstrip('#'))
+                tc_pr.append(shd)
+                # vertical align
+                valign = OxmlElement('w:vAlign')
+                valign.set(qn('w:val'), vertical_align.lower())
+                tc_pr.append(valign)
+
+        # Fill data rows
+        for r, row_data in enumerate(data):
+            for c, val in enumerate(row_data):
+                if c < total_cols:
+                    cell = table.cell(r + 1, c)
+                    para = _set_cell_text(cell, val)
+                    para.alignment = para_align
+                    para.paragraph_format.space_before = Pt(0)
+                    para.paragraph_format.space_after = Pt(0)
+                    for run in para.runs:
+                        run.font.size = Pt(font_size)
+                    tc_pr = cell._tc.get_or_add_tcPr()
+                    valign = OxmlElement('w:vAlign')
+                    valign.set(qn('w:val'), vertical_align.lower())
+                    tc_pr.append(valign)
+
+        # Set borders
+        tblPr = table._element.find(qn('w:tblPr'))
+        if tblPr is None:
+            tblPr = OxmlElement('w:tblPr')
+            table._element.insert(0, tblPr)
+        existing = tblPr.find(qn('w:tblBorders'))
+        if existing is not None:
+            tblPr.remove(existing)
+        borders = OxmlElement('w:tblBorders')
+        for edge in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{edge}')
+            border.set(qn('w:val'), border_style)
+            border.set(qn('w:sz'), str(border_size))
+            border.set(qn('w:space'), '0')
+            border.set(qn('w:color'), border_color)
+            borders.append(border)
+        tblPr.append(borders)
 
         doc.save(filename)
         return f"Table with {len(data)} rows inserted at position"

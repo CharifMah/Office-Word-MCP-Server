@@ -14,7 +14,9 @@ from word_document_server.core.styles import ensure_heading_style, ensure_table_
 async def add_heading(filename: str, text: str, level: int = 1,
                       font_name: Optional[str] = None, font_size: Optional[int] = None,
                       bold: Optional[bool] = None, italic: Optional[bool] = None,
-                      border_bottom: bool = False) -> str:
+                      border_bottom: bool = False,
+                      page_break_before: bool = False,
+                      keep_with_next: bool = False) -> str:
     """Add a heading to a Word document with optional formatting."""
     filename = ensure_docx_extension(filename)
     try:
@@ -50,8 +52,8 @@ async def add_heading(filename: str, text: str, level: int = 1,
                     run.font.bold = bold
                 if italic is not None:
                     run.font.italic = italic
+        pPr = heading._element.get_or_add_pPr()
         if border_bottom:
-            pPr = heading._element.get_or_add_pPr()
             pBdr = OxmlElement('w:pBdr')
             bottom = OxmlElement('w:bottom')
             bottom.set(qn('w:val'), 'single')
@@ -60,6 +62,17 @@ async def add_heading(filename: str, text: str, level: int = 1,
             bottom.set(qn('w:color'), '000000')
             pBdr.append(bottom)
             pPr.append(pBdr)
+        if page_break_before:
+            pb = OxmlElement('w:pageBreakBefore')
+            pb.set(qn('w:val'), 'true')
+            pPr.append(pb)
+        if keep_with_next:
+            kwn = OxmlElement('w:keepNext')
+            kwn.set(qn('w:val'), 'true')
+            pPr.append(kwn)
+            kwn2 = OxmlElement('w:keepLines')
+            kwn2.set(qn('w:val'), 'true')
+            pPr.append(kwn2)
         doc.save(filename)
         return f"Heading '{text}' (level {level}) added to {filename}"
     except Exception as e:

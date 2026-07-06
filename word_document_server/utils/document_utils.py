@@ -191,7 +191,7 @@ def get_document_xml(doc_path: str) -> str:
         return f"Failed to extract XML: {str(e)}"
 
 
-def insert_header_near_text(doc_path: str, target_text: str = None, header_title: str = "", position: str = 'after', header_style: str = 'Heading 1', target_paragraph_index: int = None) -> str:
+def insert_header_near_text(doc_path: str, target_text: str = None, header_title: str = "", position: str = 'after', header_style: str = 'Heading 1', target_paragraph_index: int = None, page_break_before: bool = False, keep_with_next: bool = False) -> str:
     """Insert a header (with specified style) before or after the target paragraph. Specify by text or paragraph index. Skips TOC paragraphs in text search."""
     import os
     from docx import Document
@@ -231,6 +231,20 @@ def insert_header_near_text(doc_path: str, target_text: str = None, header_title
             para._element.addprevious(new_para._element)
         else:
             para._element.addnext(new_para._element)
+        # Apply page break / keep with next
+        if page_break_before or keep_with_next:
+            pPr = new_para._element.get_or_add_pPr()
+            if page_break_before:
+                pb = OxmlElement('w:pageBreakBefore')
+                pb.set(qn('w:val'), 'true')
+                pPr.append(pb)
+            if keep_with_next:
+                kwn = OxmlElement('w:keepNext')
+                kwn.set(qn('w:val'), 'true')
+                pPr.append(kwn)
+                kwn2 = OxmlElement('w:keepLines')
+                kwn2.set(qn('w:val'), 'true')
+                pPr.append(kwn2)
         doc.save(doc_path)
         if anchor_index is not None:
             return f"Header '{header_title}' (style: {header_style}) inserted {position} paragraph (index {anchor_index})."
