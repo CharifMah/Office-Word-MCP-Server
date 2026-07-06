@@ -118,8 +118,14 @@ async def insert_table_at_position(filename: str, headers: List[str], data: List
             p.addprevious(new_tbl)
         else:
             p.addnext(new_tbl)
-        # Refresh doc.tables mapping
-        table = doc.tables[-1]  # newest table element maps to last Table object
+        # Refresh doc.tables mapping: find the Table object whose _tbl is new_tbl
+        table = None
+        for tbl in doc.tables:
+            if tbl._element is new_tbl:
+                table = tbl
+                break
+        if table is None:
+            return "Failed to locate the inserted table in the document"
 
         # Helper to set cell text without extra leading space
         def _set_cell_text(cell, text):
