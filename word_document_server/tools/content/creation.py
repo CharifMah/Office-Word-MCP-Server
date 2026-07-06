@@ -158,6 +158,34 @@ async def add_picture(filename: str, image_path: str, width: Optional[float] = N
         return f"Failed to add picture: {str(e)}"
 
 
+async def insert_picture_at_index(filename: str, image_path: str, paragraph_index: int, width: Optional[float] = None) -> str:
+    """Insert a picture after a specific paragraph in a Word document."""
+    filename = ensure_docx_extension(filename)
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    if not os.path.exists(image_path):
+        return f"Image file {image_path} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}. Consider creating a copy first."
+    try:
+        doc = Document(filename)
+        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+            return f"Invalid paragraph_index {paragraph_index}. Document has {len(doc.paragraphs)} paragraphs."
+        target_para = doc.paragraphs[paragraph_index]
+        img_para = doc.add_paragraph()
+        run = img_para.add_run()
+        if width:
+            run.add_picture(image_path, width=Inches(width))
+        else:
+            run.add_picture(image_path)
+        target_para._element.addnext(img_para._element)
+        doc.save(filename)
+        return f"Picture '{image_path}' inserted after paragraph {paragraph_index}"
+    except Exception as e:
+        return f"Failed to insert picture: {str(e)}"
+
+
 async def add_page_break(filename: str) -> str:
     """Add a page break to a Word document."""
     filename = ensure_docx_extension(filename)

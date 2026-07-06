@@ -1,7 +1,8 @@
 """Content tools package - organized by category."""
 
 from word_document_server.tools.content.creation import (
-    add_heading, add_paragraph, add_table, add_picture, add_page_break, add_bullet_list
+    add_heading, add_paragraph, add_table, add_picture, add_page_break, add_bullet_list,
+    insert_picture_at_index
 )
 from word_document_server.tools.content.modification import (
     delete_paragraph, search_and_replace, insert_paragraph_at_index, move_section,

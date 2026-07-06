@@ -262,6 +262,15 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Insert Picture At Index",
+        ),
+    )
+    def insert_picture_at_index(filename: str, image_path: str, paragraph_index: int, width: float = None):
+        """Insert an image after a specific paragraph in a Word document."""
+        return content_tools.insert_picture_at_index(filename, image_path, paragraph_index, width)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Add Table",
         ),
     )
