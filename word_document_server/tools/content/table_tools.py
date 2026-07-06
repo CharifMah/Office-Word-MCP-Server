@@ -73,22 +73,53 @@ async def insert_table_at_position(filename: str, headers: List[str], data: List
         if target_para is None:
             return "Target paragraph not found"
 
-        # Create table element directly at anchor to avoid trailing blank paragraphs
+        # Create table element directly at anchor with full structure
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
+
         p = target_para._element
         new_tbl = OxmlElement('w:tbl')
+        # Add table properties
+        tblPr = OxmlElement('w:tblPr')
+        tblStyle = OxmlElement('w:tblStyle')
+        tblStyle.set(qn('w:val'), 'TableGrid')
+        tblPr.append(tblStyle)
+        new_tbl.append(tblPr)
+
+        # Add table grid
+        tblGrid = OxmlElement('w:tblGrid')
+        for _ in range(total_cols):
+            gridCol = OxmlElement('w:gridCol')
+            gridCol.set(qn('w:w'), '2000')
+            tblGrid.append(gridCol)
+        new_tbl.append(tblGrid)
+
+        # Add rows and cells
+        for r in range(total_rows):
+            tr = OxmlElement('w:tr')
+            for c in range(total_cols):
+                tc = OxmlElement('w:tc')
+                tcPr = OxmlElement('w:tcPr')
+                tcW = OxmlElement('w:tcW')
+                tcW.set(qn('w:w'), '2000')
+                tcW.set(qn('w:type'), 'dxa')
+                tcPr.append(tcW)
+                tc.append(tcPr)
+                p_cell = OxmlElement('w:p')
+                r_cell = OxmlElement('w:r')
+                t_cell = OxmlElement('w:t')
+                r_cell.append(t_cell)
+                p_cell.append(r_cell)
+                tc.append(p_cell)
+                tr.append(tc)
+            new_tbl.append(tr)
+
         if position == 'before':
             p.addprevious(new_tbl)
         else:
             p.addnext(new_tbl)
+        # Refresh doc.tables mapping
         table = doc.tables[-1]  # newest table element maps to last Table object
-
-        # Ensure table has the requested number of rows/columns
-        while len(table.rows) < total_rows:
-            table.add_row()
-        while len(table.columns) < total_cols:
-            table.add_column(Cm(2.5))
 
         # Helper to set cell text without extra leading space
         def _set_cell_text(cell, text):
