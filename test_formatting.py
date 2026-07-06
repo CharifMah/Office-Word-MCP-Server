@@ -3,7 +3,7 @@ Test script for add_paragraph and add_heading formatting parameters.
 """
 import asyncio
 from docx import Document
-from word_document_server.tools.content_tools import add_paragraph, add_heading
+from word_document_server.tools.content import add_paragraph, add_heading
 from word_document_server.tools.document_tools import create_document
 
 

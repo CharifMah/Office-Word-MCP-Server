@@ -24,8 +24,10 @@ from word_document_server.tools import (
     extended_document_tools,
     comment_tools
 )
-from word_document_server.tools.content_tools import replace_paragraph_block_below_header_tool
-from word_document_server.tools.content_tools import replace_block_between_manual_anchors_tool
+from word_document_server.tools.content import (
+    replace_paragraph_block_below_header_tool,
+    replace_block_between_manual_anchors_tool
+)
 
 def get_transport_config():
     """
@@ -180,7 +182,7 @@ def register_tools():
     def insert_header_near_text(filename: str, target_text: str = None, header_title: str = None, position: str = 'after', header_style: str = 'Heading 1', target_paragraph_index: int = None):
         """Insert a header (with specified style) before or after the target paragraph. Specify by text or paragraph index. Args: filename (str), target_text (str, optional), header_title (str), position ('before' or 'after'), header_style (str, default 'Heading 1'), target_paragraph_index (int, optional)."""
         return content_tools.insert_header_near_text_tool(filename, target_text, header_title, position, header_style, target_paragraph_index)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Insert Line Near Text",
@@ -191,7 +193,7 @@ def register_tools():
         Insert a new line or paragraph (with specified or matched style) before or after the target paragraph. Specify by text or paragraph index. Args: filename (str), target_text (str, optional), line_text (str), position ('before' or 'after'), line_style (str, optional), target_paragraph_index (int, optional).
         """
         return content_tools.insert_line_or_paragraph_near_text_tool(filename, target_text, line_text, position, line_style, target_paragraph_index)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Insert List Near Text",
@@ -200,6 +202,7 @@ def register_tools():
     def insert_numbered_list_near_text(filename: str, target_text: str = None, list_items: list[str] = None, position: str = 'after', target_paragraph_index: int = None, bullet_type: str = 'bullet'):
         """Insert a bulleted or numbered list before or after the target paragraph. Specify by text or paragraph index. Args: filename (str), target_text (str, optional), list_items (list of str), position ('before' or 'after'), target_paragraph_index (int, optional), bullet_type ('bullet' for bullets or 'number' for numbered lists, default: 'bullet')."""
         return content_tools.insert_numbered_list_near_text_tool(filename, target_text, list_items, position, target_paragraph_index, bullet_type)
+
     # Content tools (paragraphs, headings, tables, etc.)
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -222,7 +225,7 @@ def register_tools():
             color: Text color as hex RGB (e.g., '000000')
         """
         return content_tools.add_paragraph(filename, text, style, font_name, font_size, bold, italic, color)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Add Heading",
@@ -244,7 +247,7 @@ def register_tools():
             border_bottom: Add bottom border (for section headers)
         """
         return content_tools.add_heading(filename, text, level, font_name, font_size, bold, italic, border_bottom)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Add Picture",
@@ -253,7 +256,7 @@ def register_tools():
     def add_picture(filename: str, image_path: str, width: float = None):
         """Add an image to a Word document."""
         return content_tools.add_picture(filename, image_path, width)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Add Table",
@@ -262,7 +265,7 @@ def register_tools():
     def add_table(filename: str, rows: int, cols: int, data: list[list[str]] = None):
         """Add a table to a Word document."""
         return content_tools.add_table(filename, rows, cols, data)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Add Page Break",
@@ -271,7 +274,7 @@ def register_tools():
     def add_page_break(filename: str):
         """Add a page break to the document."""
         return content_tools.add_page_break(filename)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Delete Paragraph",
@@ -281,7 +284,7 @@ def register_tools():
     def delete_paragraph(filename: str, paragraph_index: int):
         """Delete a paragraph from a document."""
         return content_tools.delete_paragraph(filename, paragraph_index)
-    
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Search and Replace",
@@ -291,7 +294,7 @@ def register_tools():
     def search_and_replace(filename: str, find_text: str, replace_text: str):
         """Search for text and replace all occurrences."""
         return content_tools.search_and_replace(filename, find_text, replace_text)
-    
+
     # Format tools (styling, text formatting, etc.)
     @mcp.tool(
         annotations=ToolAnnotations(
