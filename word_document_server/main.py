@@ -326,6 +326,24 @@ def register_tools():
             filename, paragraph_index, start_pos, end_pos, bold, italic,
             underline, color, font_size, font_name
         )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Paragraph Format",
+        ),
+    )
+    def set_paragraph_format(filename: str, paragraph_index: int,
+                             page_break_before: bool = None, keep_with_next: bool = None,
+                             alignment: str = None, left_indent: float = None,
+                             right_indent: float = None, first_line_indent: float = None,
+                             space_before: float = None, space_after: float = None,
+                             line_spacing: float = None):
+        """Set paragraph-level formatting (page break, keep with next, alignment, indentation, spacing)."""
+        return format_tools.set_paragraph_format(
+            filename, paragraph_index, page_break_before, keep_with_next,
+            alignment, left_indent, right_indent, first_line_indent,
+            space_before, space_after, line_spacing
+        )
     
     @mcp.tool(
         annotations=ToolAnnotations(
