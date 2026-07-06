@@ -7,9 +7,11 @@ including text formatting, table formatting, and custom styles.
 import os
 from typing import List, Optional, Dict, Any
 from docx import Document
-from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_COLOR_INDEX
+from docx.shared import Pt, RGBColor, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.enum.style import WD_STYLE_TYPE
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.core.styles import create_style
@@ -20,6 +22,97 @@ from word_document_server.core.tables import (
     set_column_widths, set_table_width as set_table_width_func, auto_fit_table,
     format_cell_text_by_position, set_cell_padding_by_position
 )
+
+
+async def set_paragraph_format(filename: str, paragraph_index: int,
+                                page_break_before: Optional[bool] = None,
+                                keep_with_next: Optional[bool] = None,
+                                alignment: Optional[str] = None,
+                                left_indent: Optional[float] = None,
+                                right_indent: Optional[float] = None,
+                                first_line_indent: Optional[float] = None,
+                                space_before: Optional[float] = None,
+                                space_after: Optional[float] = None,
+                                line_spacing: Optional[float] = None) -> str:
+    """Set paragraph-level formatting (page break, keep with next, alignment, indentation, spacing).
+
+    Args:
+        filename: Path to the Word document
+        paragraph_index: Index of the paragraph (0-based)
+        page_break_before: Force a page break before the paragraph
+        keep_with_next: Keep paragraph with the next one (also enables keepLines)
+        alignment: left, center, right, justify
+        left_indent: Left indent in cm
+        right_indent: Right indent in cm
+        first_line_indent: First line indent in cm
+        space_before: Space before paragraph in pt
+        space_after: Space after paragraph in pt
+        line_spacing: Line spacing (1.0, 1.15, 1.5, 2.0)
+    """
+    filename = ensure_docx_extension(filename)
+    try:
+        paragraph_index = int(paragraph_index)
+    except (ValueError, TypeError):
+        return "Invalid parameter: paragraph_index must be an integer"
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+    try:
+        doc = Document(filename)
+        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+            return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs."
+        paragraph = doc.paragraphs[paragraph_index]
+        pPr = paragraph._element.get_or_add_pPr()
+
+        if page_break_before is not None:
+            existing = pPr.find(qn('w:pageBreakBefore'))
+            if existing is not None:
+                pPr.remove(existing)
+            if page_break_before:
+                pb = OxmlElement('w:pageBreakBefore')
+                pb.set(qn('w:val'), 'true')
+                pPr.append(pb)
+
+        if keep_with_next is not None:
+            for tag in ['w:keepNext', 'w:keepLines']:
+                existing = pPr.find(qn(tag))
+                if existing is not None:
+                    pPr.remove(existing)
+            if keep_with_next:
+                for tag in ['w:keepNext', 'w:keepLines']:
+                    el = OxmlElement(tag)
+                    el.set(qn('w:val'), 'true')
+                    pPr.append(el)
+
+        if alignment is not None:
+            align_map = {
+                'left': WD_ALIGN_PARAGRAPH.LEFT,
+                'center': WD_ALIGN_PARAGRAPH.CENTER,
+                'right': WD_ALIGN_PARAGRAPH.RIGHT,
+                'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+            }
+            paragraph.alignment = align_map.get(alignment.lower(), WD_ALIGN_PARAGRAPH.LEFT)
+
+        pf = paragraph.paragraph_format
+        if left_indent is not None:
+            pf.left_indent = Cm(left_indent)
+        if right_indent is not None:
+            pf.right_indent = Cm(right_indent)
+        if first_line_indent is not None:
+            pf.first_line_indent = Cm(first_line_indent)
+        if space_before is not None:
+            pf.space_before = Pt(space_before)
+        if space_after is not None:
+            pf.space_after = Pt(space_after)
+        if line_spacing is not None:
+            pf.line_spacing = line_spacing
+
+        doc.save(filename)
+        return f"Paragraph {paragraph_index} formatted successfully."
+    except Exception as e:
+        return f"Failed to set paragraph format: {str(e)}"
 
 
 async def format_text(filename: str, paragraph_index: int, start_pos: int, end_pos: int, 
