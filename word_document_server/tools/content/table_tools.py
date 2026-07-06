@@ -88,7 +88,7 @@ async def insert_table_at_position(filename: str, headers: List[str], data: List
         while len(table.rows) < total_rows:
             table.add_row()
         while len(table.columns) < total_cols:
-            table.add_column()
+            table.add_column(Cm(2.5))
 
         # Helper to set cell text without extra leading space
         def _set_cell_text(cell, text):
