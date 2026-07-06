@@ -115,6 +115,88 @@ async def set_paragraph_format(filename: str, paragraph_index: int,
         return f"Failed to set paragraph format: {str(e)}"
 
 
+async def clean_table_cell_whitespace(filename: str, table_index: int,
+                                       horizontal: str = 'center', vertical: str = 'center',
+                                       strip_spaces: bool = True) -> str:
+    """Remove leading/trailing whitespace in every table cell and re-center text.
+
+    Args:
+        filename: Path to the Word document
+        table_index: Index of the table (0-based)
+        horizontal: Horizontal alignment to apply (left, center, right, justify)
+        vertical: Vertical alignment to apply (top, center, bottom)
+        strip_spaces: Remove leading/trailing spaces and non-breaking spaces from each cell
+    """
+    filename = ensure_docx_extension(filename)
+    try:
+        table_index = int(table_index)
+    except (ValueError, TypeError):
+        return "Invalid parameter: table_index must be an integer"
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+    is_writeable, error_message = check_file_writeable(filename)
+    if not is_writeable:
+        return f"Cannot modify document: {error_message}"
+
+    valid_horizontal = ['left', 'center', 'right', 'justify']
+    valid_vertical = ['top', 'center', 'bottom']
+    if horizontal.lower() not in valid_horizontal:
+        return f"Invalid horizontal alignment. Valid options: {', '.join(valid_horizontal)}"
+    if vertical.lower() not in valid_vertical:
+        return f"Invalid vertical alignment. Valid options: {', '.join(valid_vertical)}"
+
+    try:
+        doc = Document(filename)
+        if table_index < 0 or table_index >= len(doc.tables):
+            return f"Invalid table index. Document has {len(doc.tables)} tables."
+        table = doc.tables[table_index]
+        align_map = {
+            'left': WD_ALIGN_PARAGRAPH.LEFT,
+            'center': WD_ALIGN_PARAGRAPH.CENTER,
+            'right': WD_ALIGN_PARAGRAPH.RIGHT,
+            'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+        }
+        para_align = align_map.get(horizontal.lower(), WD_ALIGN_PARAGRAPH.CENTER)
+
+        for row in table.rows:
+            for cell in row.cells:
+                # Reset paragraph text, removing runs with only whitespace
+                if strip_spaces:
+                    for para in cell.paragraphs:
+                        full_text = para.text
+                        cleaned = full_text.strip().strip('\u00a0').strip()
+                        if cleaned != full_text:
+                            # Clear all runs and set clean text
+                            for run in para.runs:
+                                run.clear()
+                            if cleaned:
+                                if para.runs:
+                                    para.runs[0].text = cleaned
+                                else:
+                                    para.add_run(cleaned)
+                            else:
+                                # Remove empty paragraphs beyond the first
+                                pass
+                        para.alignment = para_align
+                        para.paragraph_format.left_indent = Cm(0)
+                        para.paragraph_format.first_line_indent = Cm(0)
+                        para.paragraph_format.space_before = Pt(0)
+                        para.paragraph_format.space_after = Pt(0)
+                # Vertical alignment
+                tc_pr = cell._tc.get_or_add_tcPr()
+                existing_valign = tc_pr.find(qn('w:vAlign'))
+                if existing_valign is not None:
+                    tc_pr.remove(existing_valign)
+                valign = OxmlElement('w:vAlign')
+                valign.set(qn('w:val'), vertical.lower())
+                tc_pr.append(valign)
+
+        doc.save(filename)
+        return f"Table {table_index} cleaned and centered successfully."
+    except Exception as e:
+        return f"Failed to clean table cells: {str(e)}"
+
+
 async def format_text(filename: str, paragraph_index: int, start_pos: int, end_pos: int, 
                      bold: Optional[bool] = None, italic: Optional[bool] = None, 
                      underline: Optional[bool] = None, color: Optional[str] = None,

@@ -344,6 +344,17 @@ def register_tools():
             alignment, left_indent, right_indent, first_line_indent,
             space_before, space_after, line_spacing
         )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Clean Table Cell Whitespace",
+        ),
+    )
+    def clean_table_cell_whitespace(filename: str, table_index: int,
+                                    horizontal: str = 'center', vertical: str = 'center',
+                                    strip_spaces: bool = True):
+        """Remove leading/trailing whitespace in every table cell and re-center text."""
+        return format_tools.clean_table_cell_whitespace(filename, table_index, horizontal, vertical, strip_spaces)
     
     @mcp.tool(
         annotations=ToolAnnotations(
