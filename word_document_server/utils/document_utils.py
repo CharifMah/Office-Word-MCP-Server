@@ -135,20 +135,30 @@ def find_paragraph_by_text(doc, text, partial_match=False):
     return matching_paragraphs
 
 
-def find_and_replace_text(doc, old_text, new_text):
+def find_and_replace_text(doc_or_path, old_text, new_text):
     """
     Find and replace text throughout the document, skipping Table of Contents (TOC) paragraphs.
-    
+
     Args:
-        doc: Document object
+        doc_or_path: Document object or document path string
         old_text: Text to find
         new_text: Text to replace with
-        
+
     Returns:
         Number of replacements made
     """
+    import os
+    from docx import Document
+
+    if isinstance(doc_or_path, str):
+        if not os.path.exists(doc_or_path):
+            return 0
+        doc = Document(doc_or_path)
+    else:
+        doc = doc_or_path
+
     count = 0
-    
+
     # Search in paragraphs
     for para in doc.paragraphs:
         # Skip TOC paragraphs
@@ -159,7 +169,7 @@ def find_and_replace_text(doc, old_text, new_text):
                 if old_text in run.text:
                     run.text = run.text.replace(old_text, new_text)
                     count += 1
-    
+
     # Search in tables
     for table in doc.tables:
         for row in table.rows:
@@ -173,7 +183,7 @@ def find_and_replace_text(doc, old_text, new_text):
                             if old_text in run.text:
                                 run.text = run.text.replace(old_text, new_text)
                                 count += 1
-    
+
     return count
 
 
